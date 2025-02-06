@@ -1661,7 +1661,7 @@ void GDScriptAnalyzer::resolve_annotation(GDScriptParser::AnnotationNode *p_anno
 #endif
 
 			if (!Variant::can_convert_strict(value.get_type(), argument_info.type)) {
-				push_error(vformat(R"(Invalid argument for annotation "%s": argument %d should be "%s" but is "%s".)", p_annotation->name, i + 1, Variant::get_type_name(argument_info.type), argument->get_datatype().to_string()), argument);
+				push_error(vformat(R"(9 Invalid argument for annotation "%s": argument %d should be "%s" but is "%s".)", p_annotation->name, i + 1, Variant::get_type_name(argument_info.type), argument->get_datatype().to_string()), argument);
 				return;
 			}
 
@@ -2049,6 +2049,10 @@ void GDScriptAnalyzer::resolve_assignable(GDScriptParser::AssignableNode *p_assi
 				if (!is_constant && is_type_compatible(initializer_type, specified_type)) {
 					mark_node_unsafe(p_assignable->initializer);
 					p_assignable->use_conversion_assign = true;
+				} else if ((specified_type.builtin_type == Variant::ARRAY && initializer_type.builtin_type == Variant::ARRAY) || (specified_type.builtin_type == Variant::DICTIONARY && initializer_type.builtin_type == Variant::DICTIONARY)) {
+					// Allow assigning an typed array or dictionary to a variant array or dictionary typed with its subclass.
+					mark_node_unsafe(p_assignable->initializer);
+					p_assignable->use_conversion_assign = true;
 				} else {
 					push_error(vformat(R"(Cannot assign a value of type %s to %s "%s" with specified type %s.)", initializer_type.to_string(), p_kind, p_assignable->identifier->name, specified_type.to_string()), p_assignable->initializer);
 				}
@@ -2169,7 +2173,7 @@ void GDScriptAnalyzer::resolve_for(GDScriptParser::ForNode *p_for) {
 						if (argument->is_constant) {
 							if (argument->reduced_value.get_type() != Variant::INT && argument->reduced_value.get_type() != Variant::FLOAT) {
 								can_reduce = false;
-								push_error(vformat(R"*(Invalid argument for "range()" call. Argument %d should be int or float but "%s" was given.)*", i + 1, Variant::get_type_name(argument->reduced_value.get_type())), argument);
+								push_error(vformat(R"*(8 Invalid argument for "range()" call. Argument %d should be int or float but "%s" was given.)*", i + 1, Variant::get_type_name(argument->reduced_value.get_type())), argument);
 							}
 							if (can_reduce) {
 								args.write[i] = argument->reduced_value;
@@ -2184,7 +2188,7 @@ void GDScriptAnalyzer::resolve_for(GDScriptParser::ForNode *p_for) {
 								if (!argument_type.is_hard_type()) {
 									downgrade_node_type_source(argument);
 								} else {
-									push_error(vformat(R"*(Invalid argument for "range()" call. Argument %d should be int or float but "%s" was given.)*", i + 1, argument_type.to_string()), argument);
+									push_error(vformat(R"*(7 Invalid argument for "range()" call. Argument %d should be int or float but "%s" was given.)*", i + 1, argument_type.to_string()), argument);
 								}
 							}
 						}
@@ -2948,7 +2952,7 @@ void GDScriptAnalyzer::reduce_assignment(GDScriptParser::AssignmentNode *p_assig
 			p_assignment->use_conversion_assign = true;
 			downgrades_assigned = downgrades_assigned || (!assigned_is_variant && !is_type_compatible(assignee_type, op_type, true, p_assignment->assigned_value));
 		} else if (compatible) {
-			if (op_type.is_variant()) {
+			if (op_type.is_variant() || ((op_type.builtin_type == Variant::ARRAY && assignee_type.builtin_type == Variant::ARRAY) || (op_type.builtin_type == Variant::DICTIONARY && assignee_type.builtin_type == Variant::DICTIONARY))) {
 				// non-variant assignee and variant result
 				mark_node_unsafe(p_assignment);
 				if (assignee_is_hard) {
@@ -3239,7 +3243,7 @@ void GDScriptAnalyzer::reduce_call(GDScriptParser::CallNode *p_call, bool p_is_a
 
 				switch (err.error) {
 					case Callable::CallError::CALL_ERROR_INVALID_ARGUMENT:
-						push_error(vformat(R"*(Invalid argument for "%s()" constructor: argument %d should be "%s" but is "%s".)*", Variant::get_type_name(builtin_type), err.argument + 1,
+						push_error(vformat(R"*(6 Invalid argument for "%s()" constructor: argument %d should be "%s" but is "%s".)*", Variant::get_type_name(builtin_type), err.argument + 1,
 										   Variant::get_type_name(Variant::Type(err.expected)), p_call->arguments[err.argument]->get_datatype().to_string()),
 								p_call->arguments[err.argument]);
 						break;
@@ -3414,10 +3418,10 @@ void GDScriptAnalyzer::reduce_call(GDScriptParser::CallNode *p_call, bool p_is_a
 				switch (err.error) {
 					case Callable::CallError::CALL_ERROR_INVALID_ARGUMENT:
 						if (value.get_type() == Variant::STRING && !value.operator String().is_empty()) {
-							push_error(vformat(R"*(Invalid argument for "%s()" function: %s)*", function_name, value), p_call->arguments[err.argument]);
+							push_error(vformat(R"*(5 Invalid argument for "%s()" function: %s)*", function_name, value), p_call->arguments[err.argument]);
 						} else {
 							// Do not use `type_from_property()` for expected type, since utility functions use their own checks.
-							push_error(vformat(R"*(Invalid argument for "%s()" function: argument %d should be "%s" but is "%s".)*", function_name, err.argument + 1,
+							push_error(vformat(R"*(4 Invalid argument for "%s()" function: argument %d should be "%s" but is "%s".)*", function_name, err.argument + 1,
 											   Variant::get_type_name((Variant::Type)err.expected), p_call->arguments[err.argument]->get_datatype().to_string()),
 									p_call->arguments[err.argument]);
 						}
@@ -3465,10 +3469,10 @@ void GDScriptAnalyzer::reduce_call(GDScriptParser::CallNode *p_call, bool p_is_a
 				switch (err.error) {
 					case Callable::CallError::CALL_ERROR_INVALID_ARGUMENT:
 						if (value.get_type() == Variant::STRING && !value.operator String().is_empty()) {
-							push_error(vformat(R"*(Invalid argument for "%s()" function: %s)*", function_name, value), p_call->arguments[err.argument]);
+							push_error(vformat(R"*(3 Invalid argument for "%s()" function: %s)*", function_name, value), p_call->arguments[err.argument]);
 						} else {
 							// Do not use `type_from_property()` for expected type, since utility functions use their own checks.
-							push_error(vformat(R"*(Invalid argument for "%s()" function: argument %d should be "%s" but is "%s".)*", function_name, err.argument + 1,
+							push_error(vformat(R"*(2 Invalid argument for "%s()" function: argument %d should be "%s" but is "%s".)*", function_name, err.argument + 1,
 											   Variant::get_type_name((Variant::Type)err.expected), p_call->arguments[err.argument]->get_datatype().to_string()),
 									p_call->arguments[err.argument]);
 						}
@@ -5846,7 +5850,7 @@ void GDScriptAnalyzer::validate_call_arg(const List<GDScriptParser::DataType> &p
 #endif
 		} else if (par_type.is_hard_type() && !is_type_compatible(par_type, arg_type, true)) {
 			if (!is_type_compatible(arg_type, par_type)) {
-				push_error(vformat(R"*(Invalid argument for "%s()" function: argument %d should be "%s" but is "%s".)*",
+				push_error(vformat(R"*(1 Invalid argument for "%s()" function: argument %d should be "%s" but is "%s".)*",
 								   p_call->function_name, i + 1, par_type.to_string(), arg_type.to_string()),
 						p_call->arguments[i]);
 #ifdef DEBUG_ENABLED
